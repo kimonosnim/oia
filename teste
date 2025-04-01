@@ -1,0 +1,61 @@
+@app.route('/frete/<cep_destino>/<produto>/<int:quantidade>', methods=['GET'])
+def calcular_frete(cep_destino, produto, quantidade):
+    if produto not in produtos_config:
+        return jsonify({"erro": "Produto inválido"}), 400
+
+    config = produtos_config[produto]
+
+    url = "https://api.melhorenvio.com.br/api/v2/me/shipment/calculate"
+    headers = {
+        "Authorization": f"Bearer {TOKEN}",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+
+    payload = {
+        "from": {"postal_code": CEP_ORIGEM},
+        "to": {"postal_code": cep_destino},
+        "products": [
+            {
+                "id": "1",
+                "width": config["width"],
+                "height": config["height"],
+                "length": config["length"],
+                "weight": config["weight"],
+                "insurance_value": config["insurance_value"],
+                "quantity": quantidade
+            }
+        ],
+        "services": [],
+        "options": {
+            "receipt": False,
+            "own_hand": False,
+            "reverse": False,
+            "non_commercial": True,
+            "invoice": None
+        },
+        "coupon": None
+    }
+
+    response = requests.post(url, headers=headers, json=payload)
+
+    if response.status_code != 200:
+        return jsonify({"erro": "Falha no cálculo", "detalhes": response.text}), 500
+
+    dados = response.json()
+    resultados = []
+
+    for frete in dados:
+        resultados.append({
+            "transportadora": frete['company']['name'],
+            "servico": frete['name'],
+            "preco": f"R$ {frete['price']}",
+            "prazo": f"{frete['delivery_time']} dias úteis"
+        })
+
+    return jsonify({
+        "cep_destino": cep_destino,
+        "produto": produto,
+        "quantidade": quantidade,
+        "fretes_disponiveis": resultados
+    })
